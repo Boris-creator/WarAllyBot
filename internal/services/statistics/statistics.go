@@ -1,4 +1,4 @@
-package deepstate
+package statistics
 
 import (
 	dsApi "ds/internal/api/deepState"
@@ -25,24 +25,32 @@ func GetActualState() (dsApi.AreasResponse, error) {
 	return *areas, nil
 }
 
-func GetHistory(db *gorm.DB) (int, error) {
+func GetActualStateByGeoJson() (dsApi.AreasResponse, error) {
 	cli := gentleman.New()
-	records, err := dsApi.GetHistoryRecords(cli)
+	rec, err := dsApi.GetLastHistoryRecord(cli)
+	if err != nil {
+		return dsApi.AreasResponse{}, err
+	}
+	areas, err := dsApi.GetHistoryRecordAreas(cli, rec.Id)
+	if err != nil {
+		return dsApi.AreasResponse{}, err
+	}
+	return *areas, nil
+}
+
+func GetHistory(db *gorm.DB) (int, error) {
+	newRecords, err := fetchNewRecords(db)
 	if err != nil {
 		return 0, err
 	}
-	newRecordIds := dsRepo.FindNewIds(db, sliceutils.Pluck(records, func(r dsApi.HistoryRecord) *int { return &r.Id }))
-	newRecords := sliceutils.Filter(records, func(r dsApi.HistoryRecord, _ int, _ []dsApi.HistoryRecord) bool {
-		return sliceutils.Includes(newRecordIds, r.Id)
-	})
+
 	return dsRepo.SaveHistoryRecords(db, sliceutils.Map(newRecords, func(r dsApi.HistoryRecord, _ int, _ []dsApi.HistoryRecord) models.HistoryRecord {
 		return recordToModel(r)
 	})), nil
 }
 
-func GetAreasControlHistory() error {
-	cli := gentleman.New()
-	records, err := dsApi.GetHistoryRecords(cli)
+func GetMapHistory(db *gorm.DB) error {
+	records, err := fetchNewRecords(db)
 	if err != nil {
 		return err
 	}
@@ -50,28 +58,48 @@ func GetAreasControlHistory() error {
 	mu := sync.Mutex{}
 	wg.Add(len(records))
 
-	areasRecords := make([]dsApi.AreasResponse, len(records))
+	cli := gentleman.New()
+
+	geodata := make([]models.HistoryRecordGeoJSON, 0, len(records))
 	for _, record := range records {
 		go func(record dsApi.HistoryRecord) {
-			areas, err := dsApi.GetHistoryRecordAreas(cli, record.Id)
+			defer wg.Done()
+			areas, err := dsApi.GetHistoryRecordGeoJson(cli, record.Id)
 			if err != nil {
+				println(err.Error())
 				return
 			}
-			defer func() {
-				wg.Done()
-			}()
 			mu.Lock()
-			areasRecords = append(areasRecords, *areas)
+			geodata = append(geodata, models.HistoryRecordGeoJSON{
+				HistoryRecordId: record.Id,
+				Geojson:         string(areas),
+			})
 			mu.Unlock()
 		}(record)
 	}
 	wg.Wait()
+	//TODO: Save geojson with history records, so as not to break fk constraints
+	dsRepo.SaveGeoJson(db, geodata)
 
 	return nil
 }
 
 func GetRecordsByDate(db *gorm.DB, t time.Time) []models.HistoryRecord {
 	return dsRepo.FindRecordsByDate(db, t)
+}
+
+func fetchNewRecords(db *gorm.DB) ([]dsApi.HistoryRecord, error) {
+	cli := gentleman.New()
+	records, err := dsApi.GetHistoryRecords(cli)
+	if err != nil {
+		return nil, err
+	}
+
+	newRecordIds := dsRepo.FindNewIds[models.HistoryRecord](db, sliceutils.Pluck(records, func(r dsApi.HistoryRecord) *int { return &r.Id }))
+	newRecords := sliceutils.Filter(records, func(r dsApi.HistoryRecord, _ int, _ []dsApi.HistoryRecord) bool {
+		return sliceutils.Includes(newRecordIds, r.Id)
+	})
+	return newRecords, nil
 }
 
 func recordToModel(r dsApi.HistoryRecord) models.HistoryRecord {

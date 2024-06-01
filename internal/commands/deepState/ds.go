@@ -4,7 +4,9 @@ import (
 	"context"
 	api "ds/internal/api/deepState"
 	m "ds/internal/database/models"
-	deepstate "ds/internal/services/deepState"
+
+	//"ds/internal/services/geography"
+	"ds/internal/services/statistics"
 	"fmt"
 	"regexp"
 	"strconv"
@@ -29,10 +31,7 @@ var dict = map[api.AreaStatusType]string{
 }
 
 func ActualStateHandler(ctx context.Context, b *bot.Bot, update *models.Update) {
-	res, err := deepstate.GetActualState()
-	if err != nil {
-		println(err.Error())
-	}
+	res, _ := statistics.GetActualState()
 
 	text := ""
 
@@ -68,9 +67,9 @@ func ActualStateHandler(ctx context.Context, b *bot.Bot, update *models.Update) 
 
 func HistoryHandler(db *gorm.DB) func(context.Context, *bot.Bot, *models.Update) {
 	return func(ctx context.Context, b *bot.Bot, update *models.Update) {
-		res, err := deepstate.GetHistory(db)
+		res, err := statistics.GetHistory(db)
 		if err != nil {
-			println(err.Error())
+			fmt.Printf("%e\n", err)
 		}
 		b.SendMessage(ctx, &bot.SendMessageParams{
 			ChatID:    update.Message.Chat.ID,
@@ -80,7 +79,21 @@ func HistoryHandler(db *gorm.DB) func(context.Context, *bot.Bot, *models.Update)
 	}
 }
 
+func GeoHistoryHandler(db *gorm.DB) func(context.Context, *bot.Bot, *models.Update) {
+	return func(ctx context.Context, b *bot.Bot, update *models.Update) {
+		err := statistics.GetMapHistory(db)
+		b.SendMessage(ctx, &bot.SendMessageParams{
+			ChatID:    update.Message.Chat.ID,
+			Text:      bot.EscapeMarkdown(fmt.Sprintf("...%e", err)),
+			ParseMode: models.ParseModeMarkdown,
+		})
+	}
+}
+
 func DateRequestHandler(db *gorm.DB) func(context.Context, *bot.Bot, *models.Update) {
+	//Expects date in format DD.MM.YYYY
+	//TODO: use inline keyboard
+
 	return func(ctx context.Context, b *bot.Bot, update *models.Update) {
 
 		regex := *regexp.MustCompile(`^(\d{2}).(\d{2}).(\d{4})$`)
@@ -97,7 +110,7 @@ func DateRequestHandler(db *gorm.DB) func(context.Context, *bot.Bot, *models.Upd
 
 		var text string
 
-		res := deepstate.GetRecordsByDate(db, t)
+		res := statistics.GetRecordsByDate(db, t)
 		if len(res) == 0 {
 			text = "Нічого не знайдено"
 		} else {
@@ -106,14 +119,11 @@ func DateRequestHandler(db *gorm.DB) func(context.Context, *bot.Bot, *models.Upd
 			}), "\n")
 		}
 
-		_, err := b.SendMessage(ctx, &bot.SendMessageParams{
+		b.SendMessage(ctx, &bot.SendMessageParams{
 			ChatID:    update.Message.Chat.ID,
 			Text:      text,
 			ParseMode: models.ParseModeHTML,
 		})
-		if err != nil {
-			fmt.Println(err.Error())
-		}
 	}
 }
 
@@ -123,12 +133,9 @@ func HelpHandler(ctx context.Context, b *bot.Bot, update *models.Update) {
 		bot.EscapeMarkdown(`Бот, який надасть вам актуальні відомості про стан справ на фронті.
 Джерело даних: https://deepstatemap.live`),
 	)
-	_, err := b.SendMessage(ctx, &bot.SendMessageParams{
+	b.SendMessage(ctx, &bot.SendMessageParams{
 		ChatID:    update.Message.Chat.ID,
 		Text:      about,
 		ParseMode: models.ParseModeMarkdown,
 	})
-	if err != nil {
-		fmt.Println(err.Error())
-	}
 }

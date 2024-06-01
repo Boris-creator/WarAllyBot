@@ -40,6 +40,7 @@ func main() {
 	}
 	b.RegisterHandler(bot.HandlerTypeMessageText, "/state", bot.MatchTypeExact, deepstate.ActualStateHandler)
 	b.RegisterHandler(bot.HandlerTypeMessageText, "/parse", bot.MatchTypeExact, deepstate.HistoryHandler(db))
+	b.RegisterHandler(bot.HandlerTypeMessageText, "/map", bot.MatchTypeExact, deepstate.GeoHistoryHandler(db))
 	b.RegisterHandler(bot.HandlerTypeMessageText, "/about", bot.MatchTypeExact, deepstate.HelpHandler)
 
 	b.Start(context.Background())
