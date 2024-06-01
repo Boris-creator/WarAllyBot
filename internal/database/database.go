@@ -7,6 +7,7 @@ import (
 	mysql_driver "github.com/go-sql-driver/mysql"
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
+	"gorm.io/gorm/logger"
 )
 
 func Connect() (*gorm.DB, error) {
@@ -18,9 +19,11 @@ func Connect() (*gorm.DB, error) {
 		AllowNativePasswords: true,
 	}
 	d := mysql.Open(cfg.FormatDSN())
-	return gorm.Open(d, &gorm.Config{})
+	return gorm.Open(d, &gorm.Config{
+		Logger: logger.Default.LogMode(logger.Silent),
+	})
 }
 
 func Migrate(db *gorm.DB) {
-	db.AutoMigrate(&models.HistoryRecord{})
+	db.AutoMigrate(&models.HistoryRecord{}, &models.HistoryRecordGeoJSON{})
 }

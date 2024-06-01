@@ -44,6 +44,8 @@ type Area struct {
 }
 type AreasResponse []Area
 
+type GeojsonResponse interface{}
+
 const baseUrl = "https://deepstatemap.live"
 
 func GetLastHistoryRecord(cli *gentleman.Client) (*LastRecordResponse, error) {
@@ -81,4 +83,15 @@ func GetHistoryRecordAreas(cli *gentleman.Client, recordId int) (*AreasResponse,
 	var r AreasResponse
 	json.Unmarshal(response.Bytes(), &r)
 	return &r, nil
+}
+
+func GetHistoryRecordGeoJson(cli *gentleman.Client, recordId int) ([]byte, error) {
+	cli.BaseURL(baseUrl).Use(url.Path("/api/history/:id/geojson"))
+	cli.Use(url.Param("id", fmt.Sprintf("%d", recordId)))
+	response, err := cli.Get().Send()
+	err = api.HandleError(*response, err)
+	if err != nil {
+		return nil, err
+	}
+	return response.Bytes(), nil
 }
