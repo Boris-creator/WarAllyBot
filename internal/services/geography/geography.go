@@ -18,11 +18,11 @@ type AreaControl struct {
 // https://deepstatemap.live/api/history/:id/areas
 // but we can calculate it from geojson the next way
 func CalculateAreas(d []byte) (AreaControl, error) {
-	var test AreaControl
+	var ac AreaControl
 
 	fc, err := geojson.UnmarshalFeatureCollection(d)
 	if err != nil {
-		return test, err
+		return ac, err
 	}
 
 	for _, f := range fc.Features {
@@ -41,18 +41,18 @@ func CalculateAreas(d []byte) (AreaControl, error) {
 		a := geo.Area(f.Geometry)
 		status = strings.TrimSpace(status)
 		if strings.HasPrefix(status, "geoJSON.status.dismissed") {
-			test.Liberated += a
+			ac.Liberated += a
 		}
 		switch status {
 		case "geoJSON.status.occupied":
-			test.OccupiedAfter += a
+			ac.OccupiedAfter += a
 		case "geoJSON.territories.ordlo":
-			test.OccupiedBefore += a
+			ac.OccupiedBefore += a
 		case "geoJSON.territories.crimea":
-			test.OccupiedBefore += a
+			ac.OccupiedBefore += a
 		case "geoJSON.status.unknown":
-			test.Unspecified += a
+			ac.Unspecified += a
 		}
 	}
-	return test, nil
+	return ac, nil
 }
